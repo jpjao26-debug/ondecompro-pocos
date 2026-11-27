@@ -46,9 +46,9 @@ def _slug(t):
 
 
 def _filtrar(route):
-    """Não baixa fotos, fontes e rastreadores: a coleta fica bem mais rápida e leve."""
+    """Não baixa fotos, fontes, estilos e rastreadores: a coleta fica bem mais rápida e leve."""
     req = route.request
-    if req.resource_type in ("image", "media", "font") or any(r in req.url for r in _RASTREADORES):
+    if req.resource_type in ("image", "media", "font", "stylesheet") or any(r in req.url for r in _RASTREADORES):
         return route.abort()
     return route.continue_()
 
@@ -112,6 +112,17 @@ def _item_api(d, mercado, loja, categoria):
     }
 
 
+class ColetaInterrompida(RuntimeError):
+    """O navegador fechou no meio (PC sem memória, janela fechada...). Leva junto o que já foi lido."""
+    def __init__(self, msg, parcial):
+        super().__init__(msg)
+        self.parcial = parcial
+
+
+def _caiu(e):
+    return e.__class__.__name__ == "TargetClosedError" or "closed" in str(e).lower()
+
+
 def coletar(mercado, limite_paginas=None):
     from playwright.sync_api import sync_playwright
 
@@ -119,6 +130,7 @@ def coletar(mercado, limite_paginas=None):
     loja, nome_loja = cfg["url"], cfg["nome"]
     pausa = int(float(os.getenv("VIP_PAUSA", "0.4")) * 1000)
     produtos, vistos = [], set()
+    caiu = None
     with sync_playwright() as p:
         nav, ctx = _abrir_navegador(p)
         pg = ctx.new_page()
@@ -147,13 +159,15 @@ def coletar(mercado, limite_paginas=None):
         log(f"{nome_loja} · {len(deps)} departamentos: {', '.join(n for _, n in deps)}")
 
         for slug, nome in deps:
+            if caiu:
+                break
             pagina, total, antes = 1, 1, len(produtos)
             while pagina <= total:
                 caminho = f"/departamentos/{slug}?page={pagina}"
                 alvo = f"/produtos?page={pagina}&"
                 j, ultimo_erro = None, ""
                 # a cada 20 páginas recarrega tudo: a lista do site vai acumulando e pesando a memória
-                for jeito in (("spa", "recarregar") if pagina % 20 != 1 else ("recarregar",)):
+                for jeito in (("spa", "recarregar") if pagina % 20 != 1 else ("recarregar", "recarregar")):
                     try:
                         with pg.expect_response(
                             lambda r: "/departamentos/" in r.url and alvo in r.url and "/filtros" not in r.url,
@@ -167,9 +181,16 @@ def coletar(mercado, limite_paginas=None):
                         break
                     except Exception as e:
                         ultimo_erro = e.__class__.__name__
+                        if _caiu(e):
+                            caiu = e
+                            break
+                        pg.wait_for_timeout(2000)
+                if caiu:
+                    log(f"{nome_loja} · o navegador fechou no meio da coleta ({len(produtos)} produtos lidos até aqui)")
+                    break
                 if j is None:
                     if pagina == 1:
-                        log(f"{nome_loja} · {nome}: não abriu ({ultimo_erro}); pulando")
+                        log(f"{nome_loja} · {nome} (/departamentos/{slug}): não abriu ({ultimo_erro}); pulando")
                         break
                     log(f"{nome_loja} · {nome} página {pagina}: falhou ({ultimo_erro}); seguindo")
                     pagina += 1
@@ -188,7 +209,12 @@ def coletar(mercado, limite_paginas=None):
                 pg.wait_for_timeout(pausa)
             if len(produtos) > antes:
                 log(f"{nome_loja} · {nome}: +{len(produtos) - antes} (total {len(produtos)})")
-        nav.close()
+        try:
+            nav.close()
+        except Exception:
+            pass
+    if caiu:
+        raise ColetaInterrompida(f"{nome_loja}: o navegador fechou no meio da coleta", produtos)
     if not produtos:
         raise RuntimeError(f"{nome_loja}: nenhum produto lido")
     return produtos

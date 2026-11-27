@@ -1,0 +1,40 @@
+name: Teste na nuvem
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/teste_nuvem.yml"
+      - "coletor/teste_nuvem.py"
+permissions:
+  contents: write
+jobs:
+  teste:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Instalar
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Testar os mercados
+        env:
+          TZ: America/Sao_Paulo
+          PYTHONUTF8: "1"
+        run: xvfb-run -a python -m coletor.teste_nuvem
+      - name: Guardar o resultado no ramo teste-nuvem
+        if: always()
+        run: |
+          [ -f teste_nuvem.txt ] || echo "o teste não gerou resultado" > teste_nuvem.txt
+          cp teste_nuvem.txt /tmp/r.txt
+          git config user.name "robo-ondecompro"
+          git config user.email "robo@ondecompro.local"
+          git checkout --orphan teste-nuvem
+          git rm -rf --cached . > /dev/null
+          cp /tmp/r.txt teste_nuvem.txt
+          git add -f teste_nuvem.txt
+          git commit -m "Resultado do teste na nuvem"
+          git push -f origin teste-nuvem

@@ -6,7 +6,6 @@ Uso:  python -m coletor.rodar                 (todas as lojas)
 import os
 import sys
 import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from . import comparar, vipcommerce
 from .comum import DADOS, ler_json, log, salvar_json
@@ -18,27 +17,25 @@ def main():
     escolhidos = [m.strip() for m in os.getenv("MERCADOS", ",".join(COLETORES)).split(",") if m.strip() in COLETORES]
     brutos, falhas = {}, []
 
-    def coletar_um(m):
+    # uma loja de cada vez: o PC fica leve (as três juntas deixavam o PC sem memória)
+    for m in escolhidos:
         log(f"Coletando {m}…")
-        produtos = vipcommerce.coletar(m)
-        salvar_json(DADOS / f"bruto_{m}.json", produtos)
-        return produtos
-
-    # as três lojas são sites diferentes, então coletamos todas ao mesmo tempo
-    with ThreadPoolExecutor(max_workers=len(escolhidos) or 1) as pool:
-        tarefas = {pool.submit(coletar_um, m): m for m in escolhidos}
-        for t in as_completed(tarefas):
-            m = tarefas[t]
-            try:
-                brutos[m] = t.result()
-                log(f"{m}: {len(brutos[m])} produtos")
-            except Exception:
-                traceback.print_exc()
-                falhas.append(m)
-                antigo = ler_json(DADOS / f"bruto_{m}.json")
-                if antigo:
-                    log(f"{m}: usando a coleta anterior")
-                    brutos[m] = antigo
+        try:
+            brutos[m] = vipcommerce.coletar(m)
+            salvar_json(DADOS / f"bruto_{m}.json", brutos[m])
+            log(f"{m}: {len(brutos[m])} produtos")
+        except Exception as e:
+            traceback.print_exc()
+            falhas.append(m)
+            antigo = ler_json(DADOS / f"bruto_{m}.json") or []
+            parcial = getattr(e, "parcial", None) or []
+            if len(parcial) > len(antigo):
+                log(f"{m}: usando o que deu para ler agora ({len(parcial)} produtos)")
+                brutos[m] = parcial
+                salvar_json(DADOS / f"bruto_{m}.json", parcial)
+            elif antigo:
+                log(f"{m}: usando a coleta anterior ({len(antigo)} produtos)")
+                brutos[m] = antigo
     # quem não foi coletado agora entra com a última coleta (para o app não perder o mercado)
     for m in COLETORES:
         if m not in brutos:
@@ -50,9 +47,7 @@ def main():
         sys.exit(1)
     comparar.gerar(brutos, [], [])
     if falhas:
-        log(f"Atenção: falha na coleta de {', '.join(falhas)}")
-        if len(falhas) == len(escolhidos):
-            sys.exit(1)
+        log(f"Atenção: falha na coleta de {', '.join(falhas)} (o app usa o que deu para ler)")
 
 
 if __name__ == "__main__":

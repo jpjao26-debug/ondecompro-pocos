@@ -12,6 +12,8 @@ $log = Join-Path $pastaLogs ("{0:yyyy-MM-dd}.txt" -f (Get-Date))
 function RodarPython { if (Get-Command py.exe -ErrorAction SilentlyContinue) { & py.exe -3 @args } else { & python.exe @args } }
 
 "===== Inicio: $(Get-Date -Format 'dd/MM/yyyy HH:mm') =====" | Out-File $log -Append -Encoding utf8
+# prioridade baixa: o PC continua leve enquanto o robo trabalha (o Python e o navegador herdam)
+try { (Get-Process -Id $PID).PriorityClass = "BelowNormal" } catch {}
 
 git pull --rebase --autostash *>> $log
 RodarPython -m coletor.rodar *>> $log
