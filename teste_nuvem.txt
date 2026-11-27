@@ -1,0 +1,8 @@
+Teste na nuvem (servidor do GitHub) — 27/11/2026 14:15
+
+OK   vipcommerce:sanmichel (47 s)
+     {"produtos": 280, "exemplo": [["Azeite Port Gallo Ev Clas Vd 500ml", 30.9], ["Ketchup Hellmann`s Tradicional 380g", 11.9], ["Vinagre Belmont Maçã 750ml", 10.5]], "seg_produtos": 47}
+OK   vipcommerce:supervale (48 s)
+     {"produtos": 280, "exemplo": [["Cerveja Budweiser Lager 350ml", 3.29], ["Chopp Gorillaz Divino 1lt", 26.9], ["Refrigerante Gebel Cola 2lt", 7.49]], "seg_produtos": 48}
+OK   vipcommerce:vilasul (54 s)
+     {"produtos": 316, "exemplo": [["Salsicha Sadia Hot-dog Resfriada 500g", 16.68], ["Tulipa De Frango Sadia 1kg", 40.69], ["Sobrecoxas Frango Assa Facil Perdigao 1,2kg", 26.39]], "seg_produtos": 54}
