@@ -1,0 +1,10 @@
+chaves.env
+*.env
+__pycache__/
+*.pyc
+dados/bruto_*.json
+*.tmp
+site/dados/
+logs/
+dados/encartes_semar/
+dados/encartes_assai/
